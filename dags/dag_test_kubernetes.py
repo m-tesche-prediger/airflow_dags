@@ -12,7 +12,7 @@ def my_kubernetes_dag():
     )
     def my_python_logic():
         # DIESER Code läuft im Kubernetes Pod!
-        import pandas as pd
+        # import pandas as pd
         print("Ich laufe isoliert in K8s")
         return {"status": "success"}
 
