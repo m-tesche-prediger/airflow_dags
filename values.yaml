@@ -1,0 +1,23 @@
+# values.yaml
+executor: "KubernetesExecutor"
+
+# Optional: Statische Passwörter für den Login (Standard: admin/admin)
+createUserJob:
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    password: admin
+
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: true
+    repo: https://github.com/m-tesche-prediger/airflow_dags.git
+    branch: "main"
+    subPath: "dags" # Pfad zu deinen DAGs im Repo
+    # containerName: "git-sync"
+    sshKeySecret: "airflow-git-ssh-secret"
+    # knownHosts: 
+    wait: 60 # Synchronisation alle 60 Sekunden

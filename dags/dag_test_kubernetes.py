@@ -5,14 +5,14 @@ from datetime import datetime
 def my_kubernetes_dag():
 
     @task.kubernetes(
-        image="python:3.11-slim", # Oder dein eigenes Image
+        image="python-airflow", # Oder dein eigenes Image
         name="k8s-python-task",
         namespace="airflow",
         # Hier kannst du Pakete definieren, falls sie nicht im Image sind
     )
     def my_python_logic():
         # DIESER Code läuft im Kubernetes Pod!
-        # import pandas as pd
+        import pandas as pd
         print("Ich laufe isoliert in K8s")
         return {"status": "success"}
 
