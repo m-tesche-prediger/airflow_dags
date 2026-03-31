@@ -5,7 +5,7 @@ from datetime import datetime
 def my_kubernetes_dag():
 
     @task.kubernetes(
-        image="python-airflow", # Oder dein eigenes Image
+        image="matthiastesche/python-airflow:latest", # Oder dein eigenes Image
         name="k8s-python-task",
         namespace="airflow",
         # Hier kannst du Pakete definieren, falls sie nicht im Image sind
