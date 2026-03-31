@@ -9,6 +9,18 @@ createUserJob:
     username: admin
     password: admin
 
+# Pakete für alle Airflow-Komponenten
+airflow:
+  extraPipPackages:
+    - "pymsteams"
+    - "pendulum"
+
+# Falls du Pakete nur auf den Workern brauchst (spart Zeit bei anderen Pods)
+# workers:
+#   extraPipPackages:
+#     - "tensorflow"
+
+# Beispiel für die Git-Sync Konfiguration, um DAGs aus einem Git-Repo zu laden
 dags:
   persistence:
     enabled: false

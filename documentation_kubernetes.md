@@ -24,7 +24,7 @@
 
 ### update airflow with helm
 
-<code>helm upgrade --install airflow apache-airflow/airflow -f ./projects/find_duplicates/values.yaml --namespace airflow --set logs.persistence.enabled=true</code>
+<code>helm upgrade --install airflow apache-airflow/airflow -f values.yaml --namespace airflow --set logs.persistence.enabled=true</code>
 
 <code>kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow</code>
 <code>kubectl port-forward --address 0.0.0.0 svc/airflow-api-server 8080:8080 -n airflow</code>

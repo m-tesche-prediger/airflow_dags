@@ -7,11 +7,13 @@ import numpy as np
 import pandas as pd
 import pendulum
 import pymsteams
-from airflow.decorators import dag, task
+from airflow.decorators import dag, task, get_current_context
+from airflow.operators.email import EmailOperator
 from airflow.providers.sftp.hooks.sftp import SFTPHook
 
 
 WEBHOOK_URL = "https://predigerlicht.webhook.office.com/webhookb2/deb92327-8060-49cf-8a80-d83d4476b7bb@a49c30ec-fbcb-49ed-aa08-109e364b37fe/IncomingWebhook/8b19c09de52a484da331172ea680a2d9/ef820e5a-5e03-49c3-8bf7-6e8255d3eaca"
+ALERT_EMAIL = "development@prediger.de"
 
 
 def send_teams_warning(folder_path: str, max_time: int, warning_text: str) -> None:
@@ -28,6 +30,33 @@ def send_teams_warning(folder_path: str, max_time: int, warning_text: str) -> No
     teams_message.addSection(message_section)
     teams_message.text("**OLSI Dienst crashed**")
     teams_message.send()
+
+
+@task()
+def send_email_notifications(warnings: List[str]) -> None:
+    """Send warning emails via EmailOperator when warnings exist."""
+
+    if not warnings:
+        return
+
+    context = get_current_context()
+    subject = "OLSI Dienst crashed"
+    html_lines = [
+        "<p>Bitte überprüfe den OLSI-Dienst.</p>",
+        "<ul>",
+    ]
+
+    for w in warnings:
+        html_lines.append(f"<li>{w}</li>")
+
+    html_lines.append("</ul>")
+
+    EmailOperator(
+        task_id="email_warning_operator",
+        to=[ALERT_EMAIL],
+        subject=subject,
+        html_content="\n".join(html_lines),
+    ).execute(context=context)
 
 
 @task()
@@ -101,7 +130,8 @@ def check_olsi():
         max_time=[c["max_time"] for c in checks],
     )
 
-    collect_warnings(warnings)
+    collected_warnings = collect_warnings(warnings)
+    send_email_notifications(collected_warnings)
 
 
 dag = check_olsi()
