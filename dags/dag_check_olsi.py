@@ -1,135 +1,107 @@
-from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
-from airflow.providers.sftp.hooks.sftp import SFTPHook
-from datetime import date, datetime, timedelta
-from pathlib import Path
-import pandas as pd
+from __future__ import annotations
+
+from datetime import timedelta
+from typing import List, Optional
+
 import numpy as np
+import pandas as pd
+import pendulum
 import pymsteams
+from airflow.decorators import dag, task
+from airflow.providers.sftp.hooks.sftp import SFTPHook
 
-# working directory
-pwd = str(Path(__file__).parent.absolute())
 
-
-# setup MS TEAMS object
 WEBHOOK_URL = "https://predigerlicht.webhook.office.com/webhookb2/deb92327-8060-49cf-8a80-d83d4476b7bb@a49c30ec-fbcb-49ed-aa08-109e364b37fe/IncomingWebhook/8b19c09de52a484da331172ea680a2d9/ef820e5a-5e03-49c3-8bf7-6e8255d3eaca"
 
-# create connectorcard object with the Microsoft Webhook URL
-myTeamsMessage = pymsteams.connectorcard(WEBHOOK_URL)
+
+def send_teams_warning(folder_path: str, max_time: int, warning_text: str) -> None:
+    """Send an alert to Microsoft Teams for an expired folder timestamp."""
+
+    teams_message = pymsteams.connectorcard(WEBHOOK_URL)
+    teams_message.color("#FF0000")
+
+    message_section = pymsteams.cardsection()
+    message_section.addFact("Ordner", folder_path)
+    message_section.addFact("Max Dauer [Sek]", max_time)
+    message_section.text("Bitte überprüfe den OLSI-Dienst")
+
+    teams_message.addSection(message_section)
+    teams_message.text("**OLSI Dienst crashed**")
+    teams_message.send()
 
 
-##############################################################################
-#
-# functions
-#
-##############################################################################
+@task()
+def check_folder(folder_path: str, max_time: int) -> Optional[str]:
+    """Check a single folder for stale files and notify via Teams if needed."""
 
-def check_folder(hook, path, max_time):
-    
-    # get sftp folder content 
-    folder_list = hook.describe_directory(path)
-    folder = pd.DataFrame.from_dict(folder_list, orient='index')
-    
-    # variables
-    files = ''
-    warning = "No warning"
-    
-    if not folder.empty:
-       
-        # filter only files
-        files = folder[(folder['type'] == 'file')]
+    hook = SFTPHook(ftp_conn_id="magento_sftp")
+    warning: Optional[str] = None
 
-        # create datetime column
-        files['modify_2'] = pd.to_datetime(files['modify'].astype(str), format='%Y%m%d%H%M%S').dt.tz_localize('UTC').dt.tz_convert('Europe/Berlin')
+    try:
+        folder_list = hook.describe_directory(folder_path)
+        folder_df = pd.DataFrame.from_dict(folder_list, orient="index")
 
-        # get current time
-        now = pd.to_datetime('now').tz_localize('UTC').tz_convert('Europe/Berlin')
-        print(now)
+        if folder_df.empty:
+            return None
 
-        # check if file time is not expired
-        files['warning'] = np.where(now > files['modify_2'] + pd.Timedelta(max_time, 's'), True, False)
+        files = folder_df[folder_df["type"] == "file"].copy()
+        if files.empty:
+            return None
 
-        if (files['warning'].any()):
-            warning = "Warning on Folder: {}, Max time expired: {}".format(path,max_time)
-            
-            # create message
-            myTeamsMessage.color("#FF0000")
-    
-            # create the section
-            myMessageSection = pymsteams.cardsection()
-            
-            # Facts are key value pairs displayed in a list.
-            myMessageSection.addFact("Ordner", path)
-            myMessageSection.addFact("Max Dauer [Sek]", max_time)
-            
-            # Section Text
-            myMessageSection.text("Bitte überprüfe den OLSI-Dienst")
-            
-            myTeamsMessage.addSection(myMessageSection)
-            
-            # Add text to the message.
-            myTeamsMessage.text("**OLSI Dienst crashed**")
-            
-            # send message to MS Teams
-            myTeamsMessage.send()
-#            myTeamsMessage.printme()
+        files["modify_2"] = pd.to_datetime(
+            files["modify"].astype(str), format="%Y%m%d%H%M%S"
+        ).dt.tz_localize("UTC").dt.tz_convert("Europe/Berlin")
 
-    return warning, files
+        now = pd.Timestamp.now(tz="UTC").tz_convert("Europe/Berlin")
+        files["warning"] = np.where(now > files["modify_2"] + pd.Timedelta(max_time, "s"), True, False)
+
+        if files["warning"].any():
+            warning = f"Warning on Folder: {folder_path}, Max time expired: {max_time}"
+            send_teams_warning(folder_path=folder_path, max_time=max_time, warning_text=warning)
+
+        return warning
+    finally:
+        hook.close_conn()
 
 
-def main():
-    # connect to remote sftp server
-    sftp_hook = SFTPHook(ftp_conn_id = "magento_sftp")
+@task()
+def collect_warnings(warnings: List[Optional[str]]) -> List[str]:
+    """Collect non-empty warnings for downstream observability or logging."""
 
-    # all folders to check [path, seconds]
-    list_to_check = {'/data1/exchange/export/wawi/order/order': 2100,
-                     '/data1/exchange/export/wawi/order/webdirect': 360,
-                     '/data1/exchange/export/wawi/order/catalog': 3900,
-                     '/data1/exchange/export/wawi/order/wishlist': 360,
-                     }
+    return [w for w in warnings if w]
 
-    # iterate through all folders
-    for path, time in list_to_check.items():
-#        print(path, time)
-        w, f = check_folder(sftp_hook, path, time)
-#        print(w)
-#        print(f)
 
-    # disconnet from remote
-    sftp_hook.close_conn()
-    
+@dag(
+    dag_id="check_olsi",
+    description="Check OLSI",
+    start_date=pendulum.datetime(2020, 8, 2, tz="Europe/Berlin"),
+    schedule="*/5 7-20 * * *",
+    catchup=False,
+    default_args={
+        "owner": "m.tesche",
+        "email": ["m.tesche@prediger.de", "1501da79.prediger.de@emea.teams.ms"],
+        "email_on_failure": True,
+        "email_on_retry": True,
+        "retries": 0,
+        "retry_delay": timedelta(minutes=5),
+        "depends_on_past": False,
+    },
+    tags=["monitoring", "olsi"],
+)
+def check_olsi():
+    checks = [
+        {"folder_path": "/data1/exchange/export/wawi/order/order", "max_time": 2100},
+        {"folder_path": "/data1/exchange/export/wawi/order/webdirect", "max_time": 360},
+        {"folder_path": "/data1/exchange/export/wawi/order/catalog", "max_time": 3900},
+        {"folder_path": "/data1/exchange/export/wawi/order/wishlist", "max_time": 360},
+    ]
 
-##############################################################################
-#
-# airflow DAG
-#
-##############################################################################
+    warnings = check_folder.expand(
+        folder_path=[c["folder_path"] for c in checks],
+        max_time=[c["max_time"] for c in checks],
+    )
 
-dag_name = 'check_olsi'
+    collect_warnings(warnings)
 
-default_args = {
-        'owner'                 : 'm.tesche',
-        'description'           : 'Check OLSI',
-        'depend_on_past'        : False,
-        'start_date'            : datetime(2020, 8, 2),
-        'email': ['m.tesche@prediger.de', '1501da79.prediger.de@emea.teams.ms'],
-        'email_on_failure'      : True,
-        'email_on_retry'        : True,
-#        'retries'               : 1,
-#        'retry_delay'           : timedelta(minutes=5)
-    } 
 
-with DAG(dag_name, default_args=default_args, schedule_interval="*/5 7-20 * * *", catchup=False) as dag:
-        
-        check_olsi = PythonOperator(task_id='check_olsi',
-                                            python_callable=main
-                                            )       
-        
-#        send_email = EmailOperator(task_id='send_email',
-#                    to='m.tesche@prediger.de',
-#                    subject= dag_name + ': Customer features wurden erzeugt',
-#                    html_content=""" <h3>See attached file</h3> """,
-#                    files=[default_args.get('file_name')]
-#                    )
-
-        check_olsi
+dag = check_olsi()
