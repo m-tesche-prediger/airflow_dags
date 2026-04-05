@@ -1,1 +1,1 @@
-pandas
+pymsteams==0.2.5

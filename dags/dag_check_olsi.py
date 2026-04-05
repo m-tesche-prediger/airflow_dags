@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 import pendulum
 import pymsteams
-from airflow.decorators import dag, task, get_current_context
+from airflow.decorators import dag, task
+from airflow.sdk import get_current_context
 from airflow.operators.email import EmailOperator
 from airflow.providers.sftp.hooks.sftp import SFTPHook
 

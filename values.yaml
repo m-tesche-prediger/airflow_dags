@@ -1,4 +1,11 @@
 # values.yaml
+
+images:
+  airflow:
+    repository: matthiastesche/airflow-extended
+    tag: latest
+    pullPolicy: Always
+
 executor: "KubernetesExecutor"
 
 # Optional: Statische Passwörter für den Login (Standard: admin/admin)
@@ -11,19 +18,42 @@ createUserJob:
 
 # Pakete für alle Airflow-Komponenten
 airflow:
-  extraPipPackages:
-    - "pymsteams"
-    - "pendulum"
+
+  fernetKey: "7T512UXSSmBOkpWimFHIVb8jK6lfmSAvx4mO6Arehnc="
+  webserverSecretKey: "7T512UXSSmBOkpWimFHIVb8jK6lfmSAvx4mO6Arehnc="
+
+  config:
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+
+  # users:
+  # - username: admin
+  #   password: admin
+  #   role: Admin
+  #   email: admin@example.com
+  #   firstName: admin
+  #   lastName: admin
+
+  # extraPipPackages:
+  #   - "pymsteams==0.2.5"
+  #   - "pendulum==3.2.0"
+  # # Speziell für die vom KubernetesExecutor erzeugten Task-Pods
+  # kubernetesPodTemplate:
+  #   extraPipPackages:
+  #     - "pymsteams==0.2.5"
+  #     - "pendulum==3.2.0"
 
 # Falls du Pakete nur auf den Workern brauchst (spart Zeit bei anderen Pods)
 # workers:
 #   extraPipPackages:
-#     - "tensorflow"
+#    - "pymsteams==0.2.5"
+#    - "pendulum==3.2.0"
 
 # Beispiel für die Git-Sync Konfiguration, um DAGs aus einem Git-Repo zu laden
 dags:
   persistence:
     enabled: false
+
   gitSync:
     enabled: true
     repo: https://github.com/m-tesche-prediger/airflow_dags.git
@@ -33,3 +63,13 @@ dags:
     sshKeySecret: "airflow-git-ssh-secret"
     # knownHosts: 
     wait: 60 # Synchronisation alle 60 Sekunden
+
+logs:
+  ## the airflow logs folder
+  # path: /opt/airflow/logs
+
+  ## configs for the logs PVC
+  ## [FAQ] https://github.com/airflow-helm/charts/blob/main/charts/airflow/docs/faq/monitoring/log-persistence.md
+  persistence:
+    enabled: true
+    size: 8Gi

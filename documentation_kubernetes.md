@@ -3,9 +3,10 @@
 ## start cluster
 <code>minikube start --driver=docker --memory=8192 --cpus=4</code>
 
-## install airflow
-<code>helm repo add apache-airflow https://airflow.apache.org</code>
+## install airflow community
+<code>helm repo add airflow-stable https://airflow-helm.github.io/charts</code>   
 
+# Lokale Chart-Liste aktualisieren
 <code>helm repo update</code>
 
 <code>kubectl create namespace airflow</code>
@@ -18,13 +19,11 @@
 
 #### kubernetes secret for git_sync
 
-<code>kubectl create secret generic airflow-git-ssh-secret \
-  --from-file=gitSshKey=./airflow_key \
-  -n airflow</code>
+<code>kubectl create secret generic airflow-git-ssh-secret --from-file=gitSshKey=./airflow_key -n airflow</code>
 
-### update airflow with helm
+### update airflow (official) with helm
 
-<code>helm upgrade --install airflow apache-airflow/airflow -f values.yaml --namespace airflow --set logs.persistence.enabled=true</code>
+<code>helm upgrade --install airflow apache-airflow/airflow -f values.yaml --namespace airflow</code>
 
 <code>kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow</code>
 <code>kubectl port-forward --address 0.0.0.0 svc/airflow-api-server 8080:8080 -n airflow</code>
